@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { requestbooking } from "./script.js";
+import { requestbooking } from "../utils/legacyScript.js";
 import { useNavigate } from "react-router-dom";
 export default function AV() {
   const [date, setDate] = useState("");

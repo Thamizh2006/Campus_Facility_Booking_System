@@ -1,6 +1,6 @@
 import React from "react";
-import Header from "../src/components/layout/Header";
-import Footer from "../src/components/layout/Footer";
+import Header from "../components/layout/Header";
+import Footer from "../components/layout/Footer";
 import AboutVideo from "./AboutVideo";
 
 const About = () => {

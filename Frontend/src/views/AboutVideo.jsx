@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import videoSource from "../src/assets/a.mp4";
+import videoSource from "../assets/a.mp4";
 
 const AboutVideo = () => {
   const videoRef = useRef(null);

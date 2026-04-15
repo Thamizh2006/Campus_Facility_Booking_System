@@ -1,9 +1,9 @@
 import React, { useContext, useDeferredValue, useEffect, useMemo, useState } from "react";
-import Header from "../src/components/layout/Header";
-import Footer from "../src/components/layout/Footer";
-import { AuthContext } from "../src/App";
-import { apiRequest, getAuthHeaders } from "../src/lib/api";
-import { FACILITIES, PURPOSES, getFacilitiesByPurpose, getFacilityById } from "../src/data/facilities";
+import Header from "../components/layout/Header";
+import Footer from "../components/layout/Footer";
+import { AuthContext } from "../App";
+import { apiRequest, getAuthHeaders } from "../lib/api";
+import { FACILITIES, PURPOSES, getFacilitiesByPurpose, getFacilityById } from "../data/facilities";
 
 const DEFAULT_FORM = {
   purpose: "Hackathon",

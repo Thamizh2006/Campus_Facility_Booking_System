@@ -1,8 +1,8 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import Header from "../src/components/layout/Header";
-import Footer from "../src/components/layout/Footer";
-import { AuthContext } from "../src/App";
-import { apiRequest, getAuthHeaders } from "../src/lib/api";
+import Header from "../components/layout/Header";
+import Footer from "../components/layout/Footer";
+import { AuthContext } from "../App";
+import { apiRequest, getAuthHeaders } from "../lib/api";
 
 const readableDate = (dateValue) =>
   new Date(dateValue).toLocaleDateString("en-IN", {

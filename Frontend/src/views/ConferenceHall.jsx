@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { requestbooking } from "./script.js";
+import { requestbooking } from "../utils/legacyScript.js";
 import { useNavigate } from "react-router-dom";
 export default function AV() {
   const [date, setDate] = useState("");
@@ -48,7 +48,7 @@ export default function AV() {
 
 
       <div className="facility-info">
-        <h2>Computer Lab</h2>
+        <h2>Conference Hall</h2>
         <p>Capacity: 150 people</p>
         <p>Includes projector, sound system, and AC</p>
       </div>

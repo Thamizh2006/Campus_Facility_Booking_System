@@ -1,8 +1,8 @@
 import React, {  useRef } from "react";
-import videoSource from "../src/assets/S.mp4";
-import Footer from "../src/components/layout/Footer";
-import { AuthContext } from "../src/App";
-import Header from "../src/components/layout/Header";
+import videoSource from "../assets/S.mp4";
+import Footer from "../components/layout/Footer";
+import { AuthContext } from "../App";
+import Header from "../components/layout/Header";
 
 const COLORS = {
   primary: "#6C5CE7",

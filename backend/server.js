@@ -4,16 +4,45 @@ import dotenv from "dotenv";
 import express from "express";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
+import path from "path";
+import { fileURLToPath } from "url";
 import { authorizeRoles, protect } from "./middleware/authMiddleware.js";
 import Booking from "./models/BookingSchema.js";
 import Signup from "./models/SignupSchema.js";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 const PORT = process.env.PORT || 8080;
 const app = express();
 
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:")
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS origin not allowed"));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 const toMinutes = (timeValue) => {
@@ -51,6 +80,14 @@ mongoose
 
 app.get("/", (_req, res) => {
   res.json({ message: "SJCE booking API is running" });
+});
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    service: "sjce-booking-backend",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.post("/register", async (req, res) => {
