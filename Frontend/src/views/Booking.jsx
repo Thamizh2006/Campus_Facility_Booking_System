@@ -91,6 +91,69 @@ const computeSuggestions = (availability, startTime, endTime) => {
   return suggestions.slice(0, 4);
 };
 
+const getCapacityFitScore = (facility, attendees) => {
+  const attendeeCount = Number(attendees || 0);
+
+  if (!attendeeCount) {
+    return 0;
+  }
+
+  if (facility.capacity < attendeeCount) {
+    return -1000;
+  }
+
+  return Math.max(0, 400 - Math.abs(facility.capacity - attendeeCount));
+};
+
+const getClosenessScore = (candidateStartTime, requestedStartTime) => {
+  return Math.max(0, 300 - Math.abs(timeToMinutes(candidateStartTime) - timeToMinutes(requestedStartTime)));
+};
+
+const buildSmartVenueSuggestions = ({
+  facilities,
+  availabilityByFacility,
+  selectedFacility,
+  startTime,
+  endTime,
+  attendees,
+}) => {
+  const suggestions = facilities.flatMap((facility) => {
+    const availability = availabilityByFacility[facility.name];
+    const slotSuggestions = computeSuggestions(availability, startTime, endTime);
+
+    return slotSuggestions.map((slot, index) => ({
+      facilityId: facility.id,
+      facilityName: facility.name,
+      location: facility.location,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      score:
+        getCapacityFitScore(facility, attendees) +
+        getClosenessScore(slot.startTime, startTime) +
+        (facility.id === selectedFacility?.id ? 120 : 0) -
+        index * 15,
+      reason:
+        facility.id === selectedFacility?.id
+          ? "Best match in your selected venue"
+          : "Alternate venue with a conflict-free slot",
+    }));
+  });
+
+  const uniqueSuggestions = suggestions.filter(
+    (suggestion, index, currentSuggestions) =>
+      currentSuggestions.findIndex(
+        (item) =>
+          item.facilityId === suggestion.facilityId &&
+          item.startTime === suggestion.startTime &&
+          item.endTime === suggestion.endTime
+      ) === index
+  );
+
+  return uniqueSuggestions
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 5);
+};
+
 const Booking = () => {
   const { user } = useContext(AuthContext);
   const [form, setForm] = useState({
@@ -99,10 +162,12 @@ const Booking = () => {
   });
   const deferredPurpose = useDeferredValue(form.purpose);
   const [availability, setAvailability] = useState(null);
+  const [availabilityByFacility, setAvailabilityByFacility] = useState({});
   const [myBookings, setMyBookings] = useState([]);
   const [dashboardBookings, setDashboardBookings] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [statusVariant, setStatusVariant] = useState("success");
 
@@ -175,13 +240,62 @@ const Booking = () => {
     fetchAvailability();
   }, [form.date, selectedFacility]);
 
+  useEffect(() => {
+    if (!recommendedFacilities.length || !form.date) {
+      setAvailabilityByFacility({});
+      return;
+    }
+
+    const fetchFacilityAvailabilities = async () => {
+      setLoadingSuggestions(true);
+
+      try {
+        const responses = await Promise.all(
+          recommendedFacilities.map(async (facility) => {
+            const data = await apiRequest(
+              `/api/bookings/availability?facility=${encodeURIComponent(facility.name)}&date=${form.date}`,
+              {
+                headers: getAuthHeaders(),
+              }
+            );
+
+            return [facility.name, data];
+          })
+        );
+
+        setAvailabilityByFacility(Object.fromEntries(responses));
+      } catch {
+        setAvailabilityByFacility({});
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    };
+
+    fetchFacilityAvailabilities();
+  }, [form.date, recommendedFacilities]);
+
   const aiSuggestions = useMemo(() => {
-    if (!availability) {
+    if (!form.date || !recommendedFacilities.length) {
       return [];
     }
 
-    return computeSuggestions(availability, form.startTime, form.endTime);
-  }, [availability, form.startTime, form.endTime]);
+    return buildSmartVenueSuggestions({
+      facilities: recommendedFacilities,
+      availabilityByFacility,
+      selectedFacility,
+      startTime: form.startTime,
+      endTime: form.endTime,
+      attendees: form.attendees,
+    });
+  }, [
+    availabilityByFacility,
+    form.attendees,
+    form.date,
+    form.endTime,
+    form.startTime,
+    recommendedFacilities,
+    selectedFacility,
+  ]);
 
   const analytics = useMemo(() => {
     const approvedCount = dashboardBookings.filter((booking) => booking.status === "Approved").length;
@@ -217,6 +331,7 @@ const Booking = () => {
   const applySuggestedSlot = (slot) => {
     setForm((current) => ({
       ...current,
+      facilityId: slot.facilityId,
       startTime: slot.startTime,
       endTime: slot.endTime,
     }));
@@ -529,22 +644,31 @@ const Booking = () => {
 
             <article className="panel">
               <p className="panel__eyebrow">AI smart suggestions</p>
-              <h2>Next best time slots</h2>
+              <h2>Best venue and time suggestions</h2>
               <div className="slot-list">
-                {aiSuggestions.length ? (
+                {loadingSuggestions ? (
+                  <p className="empty-state">Ranking the best venue-time combinations...</p>
+                ) : aiSuggestions.length ? (
                   aiSuggestions.map((slot) => (
                     <button
-                      key={slot.startTime}
+                      key={`${slot.facilityId}-${slot.startTime}-${slot.endTime}`}
                       type="button"
                       className="suggestion-card"
                       onClick={() => applySuggestedSlot(slot)}
                     >
+                      <small className="suggestion-card__eyebrow">{slot.reason}</small>
+                      <strong>{slot.facilityName}</strong>
+                      <span>{slot.location}</span>
                       <strong>{toTimeRange(slot.startTime, slot.endTime)}</strong>
-                      <span>{availability?.isAvailable ? "Also available now" : "Recommended conflict-free slot"}</span>
+                      <span>
+                        {slot.facilityId === selectedFacility?.id
+                          ? "Apply this slot in your chosen venue"
+                          : "Switch venue and apply this free slot"}
+                      </span>
                     </button>
                   ))
                 ) : (
-                  <p className="empty-state">Choose a date to generate smart slot recommendations.</p>
+                  <p className="empty-state">Choose a date to generate venue-wise smart recommendations.</p>
                 )}
               </div>
             </article>
@@ -727,6 +851,17 @@ const Booking = () => {
           text-align: left;
           cursor: pointer;
           transition: 0.2s ease;
+        }
+
+        .suggestion-card {
+          display: grid;
+          gap: 0.35rem;
+        }
+
+        .suggestion-card__eyebrow {
+          color: #8fe3cf;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
         }
 
         .facility-card:hover,

@@ -46,6 +46,17 @@ export const FACILITIES = [
     description: "Configured for hands-on sessions, coding contests, and assessments.",
   },
   {
+    id: "hackathon-center",
+    name: "Hackathon Center",
+    category: "Innovation Hub",
+    capacity: 320,
+    location: "Innovation Block",
+    approvals: ["HOD", "Innovation Cell Coordinator", "Event Coordinator"],
+    eventTypes: ["Hackathon", "Workshop", "Placement Drive", "Club Event"],
+    amenities: ["High-Speed Wi-Fi", "Power Backup", "Projection Wall", "Breakout Zones", "Mentor Desks"],
+    description: "Purpose-built for hackathons, coding marathons, prototype demos, and mentor-driven technical events.",
+  },
+  {
     id: "auditorium",
     name: "Main Auditorium",
     category: "Large Venue",
