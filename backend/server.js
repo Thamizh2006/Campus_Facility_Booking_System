@@ -18,9 +18,21 @@ dotenv.config({ path: path.resolve(__dirname, ".env") });
 const PORT = process.env.PORT || 8080;
 const app = express();
 
+const normalizeOrigin = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
 const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || "")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin.trim()) || origin.trim())
   .filter(Boolean);
 
 app.use(
