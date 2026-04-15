@@ -1,889 +1,972 @@
-// Booking.jsx
-import React, { useContext, useMemo, useRef, useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import Slider from "react-slick";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
-
-import slide1 from "./images/bookingimg1.jpeg";
-import slide2 from "./images/bookingimg2.jpg";
-import slide3 from "./images/bookingimg3.jpg";
-import slide4 from "./images/bookingimg4.jpeg";
-import videoSource from "../src/assets/BOOKHERE.mp4";
-
+import React, { useContext, useDeferredValue, useEffect, useMemo, useState } from "react";
+import Header from "../src/components/layout/Header";
+import Footer from "../src/components/layout/Footer";
 import { AuthContext } from "../src/App";
-import Footer from "./Footer";
-import Header from "./Header";
+import { apiRequest, getAuthHeaders } from "../src/lib/api";
+import { FACILITIES, PURPOSES, getFacilitiesByPurpose, getFacilityById } from "../src/data/facilities";
 
-
-
-
-const COLORS = {
-  primary: "#6C5CE7",
-  secondary: "#8E7CF6",
-  background: "#0B1220",
-  surface: "rgba(255, 255, 255, 0.08)",
-  border: "rgba(255, 255, 255, 0.18)",
-  textPrimary: "#E6EEF8",
-  textSecondary: "#C0C8D8",
-  success: "#14b8a6",
-  danger: "#ef4444",
-  warning: "#f59e0b",
+const DEFAULT_FORM = {
+  purpose: "Hackathon",
+  facilityId: "",
+  eventTitle: "",
+  organizer: "",
+  contact: "",
+  attendees: "",
+  date: "",
+  startTime: "10:00",
+  endTime: "13:00",
+  notes: "",
+  notificationChannel: "Email + SMS",
+  needsQrCheckIn: true,
 };
 
-const FACILITIES = [
-  {
-    id: "av_hall",
-    name: "AV Hall",
-    admins: [{ name: "AV In-Charge", email: "av-incharge@sjce.edu" }],
-    supports: {
-      mic: { type: "qty", max: 6 },
-      lights: { type: "bool" },
-      chairs: { type: "qty", max: 250 },
-      vipChairs: { type: "qty", max: 20 },
-      speakers: { type: "qty", max: 4 },
-      ac: { type: "bool" },
-      projector: { type: "bool" },
-      waterBottle: { type: "qty", max: 400 },
-      snacks: { type: "bool" },
-    },
-    allowedEvents: [
-      "Seminar",
-      "Orientation",
-      "Cultural Event",
-      "Guest Lecture",
-      "Club Meet",
-    ],
-  },
-  {
-    id: "auditorium",
-    name: "Indoor Auditorium",
-    admins: [{ name: "Auditorium In-Charge", email: "auditorium@sjce.edu" }],
-    supports: {
-      mic: { type: "qty", max: 10 },
-      lights: { type: "bool" },
-      chairs: { type: "qty", max: 800 },
-      vipChairs: { type: "qty", max: 40 },
-      speakers: { type: "qty", max: 8 },
-      ac: { type: "bool" },
-      projector: { type: "bool" },
-      waterBottle: { type: "qty", max: 1000 },
-      snacks: { type: "bool" },
-    },
-    allowedEvents: ["Cultural Event", "Annual Day", "Conference", "Seminar"],
-  },
-  {
-    id: "conference_hall",
-    name: "Conference Hall",
-    admins: [{ name: "Conference In-Charge", email: "conference@sjce.edu" }],
-    supports: {
-      mic: { type: "qty", max: 4 },
-      lights: { type: "bool" },
-      chairs: { type: "qty", max: 80 },
-      vipChairs: { type: "qty", max: 10 },
-      speakers: { type: "qty", max: 2 },
-      ac: { type: "bool" },
-      projector: { type: "bool" },
-      waterBottle: { type: "qty", max: 150 },
-      snacks: { type: "bool" },
-    },
-    allowedEvents: ["Meeting", "Workshop", "Review", "Seminar"],
-  },
-  {
-    id: "computer_lab",
-    name: "Computer Lab",
-    admins: [{ name: "Lab In-Charge", email: "comp-lab@sjce.edu" }],
-    supports: {
-      mic: { type: "qty", max: 2 },
-      lights: { type: "bool" },
-      chairs: { type: "qty", max: 60 },
-      vipChairs: { type: "qty", max: 5 },
-      speakers: { type: "qty", max: 2 },
-      ac: { type: "bool" },
-      projector: { type: "bool" },
-      waterBottle: { type: "qty", max: 120 },
-      snacks: { type: "bool" },
-    },
-    allowedEvents: ["Workshop", "Hands-on", "Lab Test"],
-  },
-  {
-    id: "library",
-    name: "Library",
-    admins: [{ name: "Librarian", email: "library@sjce.edu" }],
-    supports: {
-      mic: { type: "qty", max: 1 },
-      lights: { type: "bool" },
-      chairs: { type: "qty", max: 40 },
-      vipChairs: { type: "qty", max: 5 },
-      speakers: { type: "qty", max: 1 },
-      ac: { type: "bool" },
-      projector: { type: "bool" },
-      waterBottle: { type: "qty", max: 80 },
-      snacks: { type: "bool" },
-    },
-    allowedEvents: ["Orientation", "Book Talk", "Workshop"],
-  },
-];
+const SLOT_START_HOUR = 8;
+const SLOT_END_HOUR = 19;
+const SLOT_DURATION_HOURS = 1;
 
-const EVENT_TYPES = [
-  "Seminar",
-  "Workshop",
-  "Conference",
-  "Cultural Event",
-  "Orientation",
-  "Guest Lecture",
-  "Club Meet",
-  "Meeting",
-  "Review",
-  "Hands-on",
-  "Lab Test",
-  "Annual Day",
-];
-
-// ---------------------- HELPERS ----------------------
-const addDays = (date, days) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-};
-
-const toInputDate = (d) => {
-  // YYYY-MM-DD for input[type="date"]
-  const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-
-const todayIST = () => {
-  // Force IST for safety: UTC+5:30
-  const now = new Date();
-  // This is fine for client-side; server should use robust TZ handling.
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-};
-
-// ---------------------- COMPONENT ----------------------
-const Booking = () => {
-  const { isLoggedIn ,user } = useContext(AuthContext);
-  useEffect(() => {
-  if (!isLoggedIn) {
-    alert("Please login to access booking");
-    navigate("/login");
-  }
-}, [isLoggedIn, navigate]);
-
-  const navigate = useNavigate();
-  const videoRef = useRef(null);
-
-  const images = [slide1, slide2, slide3, slide4];
-  const sliderSettings = useMemo(
-    () => ({
-      dots: true,
-      infinite: true,
-      speed: 600,
-      slidesToShow: 1,
-      slidesToScroll: 1,
-      autoplay: true,
-      autoplaySpeed: 2200,
-      arrows: false,
-      pauseOnHover: true,
-      adaptiveHeight: true,
-    }),
-    []
-  );
-
-  // ---------- Booking Form State ----------
-  const [eventType, setEventType] = useState("");
-  const [facilityId, setFacilityId] = useState("");
-  const [eventDate, setEventDate] = useState("");
-  const [timeFrom, setTimeFrom] = useState("");
-  const [timeTo, setTimeTo] = useState("");
-const [name, setName] = useState(user?.username || "");
-const [department, setDepartment] = useState(user?.department || "");
-const [email, setEmail] = useState(user?.email || "");
-
-const [contact, setContact] = useState("");
-const [organizer, setOrganizer] = useState("");
-
-
-  const [resources, setResources] = useState({
-    mic: 0,
-    lights: false,
-    chairs: 0,
-    vipChairs: 0,
-    speakers: 0,
-    ac: false,
-    projector: false,
-    waterBottle: 0,
-    snacks: false,
+const formatDate = (dateValue) =>
+  new Date(dateValue).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
-  const [queries, setQueries] = useState("");
-  const [errors, setErrors] = useState({});
-  const [submitMsg, setSubmitMsg] = useState(null);
 
-  const minDate = useMemo(() => toInputDate(addDays(todayIST(), 7)), []);
+const timeToMinutes = (time) => {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+};
+
+const minutesToTime = (minutes) => {
+  const normalizedHours = String(Math.floor(minutes / 60)).padStart(2, "0");
+  const normalizedMinutes = String(minutes % 60).padStart(2, "0");
+  return `${normalizedHours}:${normalizedMinutes}`;
+};
+
+const toTimeRange = (start, end) => `${start} - ${end}`;
+
+const getBookingDuration = (startTime, endTime) => {
+  const duration = timeToMinutes(endTime) - timeToMinutes(startTime);
+  return Math.max(duration, 60);
+};
+
+const getMinimumDate = () => {
+  const currentDate = new Date();
+  currentDate.setDate(currentDate.getDate() + 1);
+  return currentDate.toISOString().split("T")[0];
+};
+
+const getDurationLabel = (startTime, endTime) => {
+  const durationInMinutes = getBookingDuration(startTime, endTime);
+  const hours = durationInMinutes / 60;
+  return Number.isInteger(hours) ? `${hours} hr` : `${hours.toFixed(1)} hrs`;
+};
+
+const computeSuggestions = (availability, startTime, endTime) => {
+  const requestedDuration = getBookingDuration(startTime, endTime);
+  const busyRanges = (availability?.bookings || [])
+    .map((booking) => ({
+      start: timeToMinutes(booking.startTime),
+      end: timeToMinutes(booking.endTime),
+    }))
+    .sort((left, right) => left.start - right.start);
+
+  const suggestions = [];
+
+  for (let current = SLOT_START_HOUR * 60; current + requestedDuration <= SLOT_END_HOUR * 60; current += SLOT_DURATION_HOURS * 60) {
+    const proposedStart = current;
+    const proposedEnd = current + requestedDuration;
+
+    const overlaps = busyRanges.some(
+      (booking) => proposedStart < booking.end && proposedEnd > booking.start
+    );
+
+    if (!overlaps) {
+      suggestions.push({
+        startTime: minutesToTime(proposedStart),
+        endTime: minutesToTime(proposedEnd),
+      });
+    }
+  }
+
+  return suggestions.slice(0, 4);
+};
+
+const Booking = () => {
+  const { user } = useContext(AuthContext);
+  const [form, setForm] = useState({
+    ...DEFAULT_FORM,
+    organizer: user?.role === "Student" ? "" : user?.email || "",
+  });
+  const deferredPurpose = useDeferredValue(form.purpose);
+  const [availability, setAvailability] = useState(null);
+  const [myBookings, setMyBookings] = useState([]);
+  const [dashboardBookings, setDashboardBookings] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusVariant, setStatusVariant] = useState("success");
+
+  const recommendedFacilities = useMemo(
+    () => getFacilitiesByPurpose(deferredPurpose),
+    [deferredPurpose]
+  );
 
   const selectedFacility = useMemo(
-    () => FACILITIES.find((f) => f.id === facilityId) || null,
-    [facilityId]
+    () => getFacilityById(form.facilityId) ?? recommendedFacilities[0] ?? null,
+    [form.facilityId, recommendedFacilities]
   );
 
-  const eligibleFacilities = useMemo(() => {
-    if (!eventType) return [];
-    return FACILITIES.filter((f) => f.allowedEvents.includes(eventType));
-  }, [eventType]);
-
-  const approveBooking = async (id) => {
-  await fetch(`http://localhost:8080/api/bookings/${id}/approve`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${user.token}`,
-    },
-  });
-  fetchBookings();
-};
-
-const rejectBooking = async (id, reason) => {
-  await fetch(`http://localhost:8080/api/bookings/${id}/reject`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${user.token}`,
-    },
-    body: JSON.stringify({ reason }),
-  });
-  fetchBookings();
-};
-
-
-  // Reset facility & resources when event changes
   useEffect(() => {
-    setFacilityId("");
-    setResources({
-      mic: 0,
-      lights: false,
-      chairs: 0,
-      vipChairs: 0,
-      speakers: 0,
-      ac: false,
-      projector: false,
-      waterBottle: 0,
-      snacks: false,
-    });
-  }, [eventType]);
+    if (recommendedFacilities.length && !recommendedFacilities.some((facility) => facility.id === form.facilityId)) {
+      setForm((current) => ({
+        ...current,
+        facilityId: recommendedFacilities[0].id,
+      }));
+    }
+  }, [form.facilityId, recommendedFacilities]);
 
-  // Reset resources when facility changes
   useEffect(() => {
-    if (!selectedFacility) return;
-    const base = {};
-    Object.entries(selectedFacility.supports).forEach(([key, spec]) => {
-      if (spec.type === "bool") base[key] = false;
-      if (spec.type === "qty") base[key] = 0;
-    });
-    setResources((r) => ({ ...base }));
-  }, [selectedFacility]);
+    const fetchDashboardData = async () => {
+      try {
+        const [ownData, allData] = await Promise.all([
+          apiRequest("/api/bookings/my", {
+            headers: getAuthHeaders(),
+          }),
+          apiRequest("/api/bookings/dashboard", {
+            headers: getAuthHeaders(),
+          }),
+        ]);
 
-  // ---------- Validation ----------
-  const validate = () => {
-    const newErr = {};
-    if (!eventType) newErr.eventType = "Please select an event type.";
-    if (!facilityId) newErr.facilityId = "Please select a facility.";
-    if (!eventDate) newErr.eventDate = "Please choose an event date.";
-
-    if (eventDate) {
-      const chosen = new Date(eventDate);
-      const min = new Date(minDate);
-      if (chosen < min) {
-        newErr.eventDate = "Bookings must be made at least 7 days in advance.";
+        setMyBookings(ownData.bookings || []);
+        setDashboardBookings(allData.bookings || []);
+      } catch {
+        setMyBookings([]);
+        setDashboardBookings([]);
       }
-    }
-    if (!timeFrom || !timeTo) newErr.time = "Please select start and end time.";
-    if (timeFrom && timeTo && timeFrom >= timeTo) {
-      newErr.time = "End time must be later than start time.";
-    }
-
-    setErrors(newErr);
-    return Object.keys(newErr).length === 0;
-  };
-
-// Booking.jsx — replace your handleSubmit with this
-// Booking.jsx — updated handleSubmit
-const handleSubmit = async (e) => {
-  e.preventDefault();
-
-  const payload = {
-    name,
-    department,
-    contact,
-    email,
-    organizer,
-    purpose: eventType,
-    facility: selectedFacility?.name,
-    date: eventDate,
-    starttime: timeFrom,
-    endtime: timeTo,
-    resources,
-    queries,
-  };
-
-  try {
-   const res = await fetch("http://localhost:8080/av/requestbooking", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${user?.token}`,
-  },
-  body: JSON.stringify(payload),
-});
-
-
-    const data = await res.json();
-
-    if (res.ok) {
-      setSubmitMsg({ type: "success", text: data.message || "Booking successful!" });
-      navigate("/bookinghistory");
-    } else {
-      setSubmitMsg({ type: "error", text: data.message || "Booking failed!" });
-    }
-  } catch (err) {
-    console.error("Booking error:", err);
-    setSubmitMsg({ type: "error", text: "Server error. Try again." });
-  }
-};
-
-
-
-
-  // ---------- UI Helpers ----------
-  const renderResourceControl = (key, spec) => {
-    const labelMap = {
-      mic: "Mic",
-      lights: "Lights",
-      chairs: "Chairs",
-      vipChairs: "VIP Chairs",
-      speakers: "Speakers",
-      ac: "AC",
-      projector: "Projector",
-      waterBottle: "Water Bottles",
-      snacks: "Snacks",
     };
 
-    const unavailable = !selectedFacility || !selectedFacility.supports[key];
+    fetchDashboardData();
+  }, []);
 
-    if (spec.type === "bool") {
-      return (
-        <label className={`res-item ${unavailable ? "disabled" : ""}`}>
-          <input
-            type="checkbox"
-            disabled={unavailable}
-            checked={!!resources[key]}
-            onChange={(e) =>
-              setResources((r) => ({ ...r, [key]: e.target.checked }))
-            }
-          />
-          <span>{labelMap[key]}</span>
-        </label>
-      );
+  useEffect(() => {
+    if (!selectedFacility || !form.date) {
+      setAvailability(null);
+      return;
     }
 
-    if (spec.type === "qty") {
-      const max = spec.max ?? 0;
-      return (
-        <label className={`res-item qty ${unavailable ? "disabled" : ""}`}>
-          <span>{labelMap[key]}</span>
-          <input
-            type="number"
-            min={0}
-            max={max}
-            step={1}
-            placeholder={`0 / ${max}`}
-            disabled={unavailable}
-            value={Number(resources[key] || 0)}
-            onChange={(e) => {
-              const v = Math.max(0, Math.min(max, Number(e.target.value)));
-              setResources((r) => ({ ...r, [key]: v }));
-            }}
-          />
-          <span className="hint">Max {max}</span>
-        </label>
-      );
+    const fetchAvailability = async () => {
+      setLoadingAvailability(true);
+
+      try {
+        const data = await apiRequest(
+          `/api/bookings/availability?facility=${selectedFacility.name}&date=${form.date}`,
+          {
+            headers: getAuthHeaders(),
+          }
+        );
+        setAvailability(data);
+      } catch {
+        setAvailability(null);
+      } finally {
+        setLoadingAvailability(false);
+      }
+    };
+
+    fetchAvailability();
+  }, [form.date, selectedFacility]);
+
+  const aiSuggestions = useMemo(() => {
+    if (!availability) {
+      return [];
     }
 
-    return null;
+    return computeSuggestions(availability, form.startTime, form.endTime);
+  }, [availability, form.startTime, form.endTime]);
+
+  const analytics = useMemo(() => {
+    const approvedCount = dashboardBookings.filter((booking) => booking.status === "Approved").length;
+    const pendingCount = dashboardBookings.filter((booking) => booking.status === "Pending").length;
+    const today = new Date().toISOString().split("T")[0];
+    const todaysEvents = dashboardBookings.filter((booking) => booking.date?.startsWith(today)).length;
+
+    return [
+      { label: "Total requests", value: dashboardBookings.length || 0 },
+      { label: "Approved events", value: approvedCount || 0 },
+      { label: "Pending approvals", value: pendingCount || 0 },
+      { label: "Today's bookings", value: todaysEvents || 0 },
+    ];
+  }, [dashboardBookings]);
+
+  const approvalRoute = selectedFacility?.approvals?.length
+    ? selectedFacility.approvals
+    : ["Instant approval"];
+
+  const availabilityLabel = availability?.isAvailable
+    ? "Available for the selected slot"
+    : "Conflict detected for the selected slot";
+
+  const handleChange = (event) => {
+    const { name, value, type, checked } = event.target;
+
+    setForm((current) => ({
+      ...current,
+      [name]: type === "checkbox" ? checked : value,
+    }));
   };
 
+  const applySuggestedSlot = (slot) => {
+    setForm((current) => ({
+      ...current,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+    }));
+  };
 
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setStatusMessage("");
+    setIsSubmitting(true);
 
-  
+    try {
+      const data = await apiRequest("/api/bookings", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          eventTitle: form.eventTitle,
+          purpose: form.purpose,
+          facility: selectedFacility?.name,
+          date: form.date,
+          startTime: form.startTime,
+          endTime: form.endTime,
+          organizer: form.organizer,
+          contact: form.contact,
+          attendees: Number(form.attendees || 0),
+          notes: form.notes,
+          notificationChannel: form.notificationChannel,
+          needsQrCheckIn: form.needsQrCheckIn,
+        }),
+      });
+
+      setStatusVariant("success");
+      setStatusMessage(data.message || "Booking request created successfully.");
+
+      setForm((current) => ({
+        ...current,
+        eventTitle: "",
+        contact: "",
+        attendees: "",
+        notes: "",
+      }));
+
+      const ownData = await apiRequest("/api/bookings/my", {
+        headers: getAuthHeaders(),
+      });
+      setMyBookings(ownData.bookings || []);
+
+      if (selectedFacility && form.date) {
+        const refreshedAvailability = await apiRequest(
+          `/api/bookings/availability?facility=${selectedFacility.name}&date=${form.date}`,
+          {
+            headers: getAuthHeaders(),
+          }
+        );
+        setAvailability(refreshedAvailability);
+      }
+    } catch (requestError) {
+      setStatusVariant("error");
+      setStatusMessage(requestError.message || "Booking request failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="page-root">
-      <style>{CSS}</style>
-
+    <div className="booking-page">
       <Header />
 
-      {/* Hero Video */}
-      <section className="hero">
-        <video
-          ref={videoRef}
-          src={videoSource}
-          muted
-          autoPlay
-          loop
-          playsInline
-          preload="auto"
-          className="hero-video"
-        />
-        <div className="hero-overlay" />
-        <div className="hero-content fade-up">
-          <h1>Smart Campus Facility Booking</h1>
-          <p>
-            AI-powered scheduling that eliminates conflicts, optimizes space
-            usage, and delivers seamless booking experiences for your entire
-            campus community.
-          </p>
-          <a href="#book" className="cta-button glow">
-            Book Now
-          </a>
-        </div>
-       
-      </section>
-
-      {/* Intro Card */}
-      <section className="intro">
-        <div className="card glass lift">
-          <h2>🔖 Book Campus Facilities Smarter with AI</h2>
-          <p>
-            Easily book auditoriums, labs, seminar halls, and more using
-            real-time AI suggestions and live availability. Fast, paperless, and
-            campus-optimized.
-          </p>
-          <p>
-            No conflicts, smart notifications, and admin-friendly approvals —
-            everything in one place.
-          </p>
-        </div>
-      </section>
-
-      {/* Gallery */}
-      <section className="gallery">
-        <Slider {...sliderSettings}>
-          {images.map((img, idx) => (
-            <div key={idx} className="slide">
-              <img src={img} alt={`Slide ${idx + 1}`} />
-            </div>
-          ))}
-        </Slider>
-      </section>
-
-      {/* Booking Form */}
-      <section id="book" className="form-wrap">
-  <div className="card glass lift fade-up">
-    <div className="form-head">
-      <h3>Request a Facility</h3>
-      <p>
-        Bookings must be made at least <strong>7 days</strong> in advance.
-      </p>
-    </div>
-
-    <form onSubmit={handleSubmit} className="grid">
-      {/* Name */}
-      <div className="field">
-        <label>
-          Name <span className="req">*</span>
-        </label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-      </div>
-
-      {/* Department */}
-      <div className="field">
-        <label>
-          Department <span className="req">*</span>
-        </label>
-        <input
-          type="text"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          required
-        />
-      </div>
-
-      {/* Contact Number */}
-      <div className="field">
-        <label>
-          Contact No <span className="req">*</span>
-        </label>
-        <input
-          type="tel"
-          value={contact}
-          onChange={(e) => setContact(e.target.value)}
-          required
-        />
-      </div>
-
-      {/* Email */}
-      <div className="field">
-        <label>
-          Email <span className="req">*</span>
-        </label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-      </div>
-
-      {/* Organizer */}
-      <div className="field">
-        <label>
-          Organizer <span className="req">*</span>
-        </label>
-        <input
-          type="text"
-          value={organizer}
-          onChange={(e) => setOrganizer(e.target.value)}
-          required
-        />
-      </div>
-
-      {/* Event Type */}
-      <div className="field">
-        <label>
-          Event Type <span className="req">*</span>
-        </label>
-        <select
-          value={eventType}
-          onChange={(e) => setEventType(e.target.value)}
-          className={errors.eventType ? "error" : ""}
-        >
-          <option value="">Select an event</option>
-          {EVENT_TYPES.map((e) => (
-            <option key={e} value={e}>
-              {e}
-            </option>
-          ))}
-        </select>
-        {errors.eventType && (
-          <small className="error-text">{errors.eventType}</small>
-        )}
-      </div>
-
-      {/* Facility */}
-      <div className="field">
-        <label>
-          Facility <span className="req">*</span>
-        </label>
-        <select
-          value={facilityId}
-          onChange={(e) => setFacilityId(e.target.value)}
-          disabled={!eventType}
-          className={errors.facilityId ? "error" : ""}
-        >
-          <option value="">
-            {eventType ? "Select a facility" : "Select event first"}
-          </option>
-          {eligibleFacilities.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-        {errors.facilityId && (
-          <small className="error-text">{errors.facilityId}</small>
-        )}
-      </div>
-
-      {/* Date */}
-      <div className="field">
-        <label>
-          Event Date <span className="req">*</span>
-        </label>
-        <input
-          type="date"
-          value={eventDate}
-          onChange={(e) => setEventDate(e.target.value)}
-          min={minDate}
-          className={errors.eventDate ? "error" : ""}
-        />
-        <small className="hint">Minimum date: {minDate}</small>
-        {errors.eventDate && (
-          <small className="error-text">{errors.eventDate}</small>
-        )}
-      </div>
-
-      {/* Time */}
-      <div className="field">
-        <label>
-          Start Time <span className="req">*</span>
-        </label>
-        <input
-          type="time"
-          value={timeFrom}
-          onChange={(e) => setTimeFrom(e.target.value)}
-        />
-      </div>
-
-      <div className="field">
-        <label>
-          End Time <span className="req">*</span>
-        </label>
-        <input
-          type="time"
-          value={timeTo}
-          onChange={(e) => setTimeTo(e.target.value)}
-          className={errors.time ? "error" : ""}
-        />
-        {errors.time && <small className="error-text">{errors.time}</small>}
-      </div>
-
-      {/* Resources */}
-      <div className="field span-2">
-        <label>Available Resources</label>
-        {!selectedFacility && (
-          <div className="muted">
-            Select a facility to view available resources.
+      <main className="booking-shell">
+        <section className="hero-panel">
+          <div>
+            <p className="hero-panel__eyebrow">Smart scheduling workspace</p>
+            <h1>Book every campus facility with conflict-aware AI assistance.</h1>
+            <p className="hero-panel__copy">
+              Purpose-based venue recommendations, live availability, approval routing,
+              reminders, and booking analytics are all built into one professional flow.
+            </p>
           </div>
-        )}
-        {selectedFacility && (
-          <div className="resources">
-            {Object.entries(selectedFacility.supports).map(([key, spec]) => (
-              <div key={key}>{renderResourceControl(key, spec)}</div>
+
+          <div className="hero-panel__stats">
+            {analytics.map((item) => (
+              <article key={item.label} className="stat-card">
+                <strong>{item.value}</strong>
+                <span>{item.label}</span>
+              </article>
             ))}
           </div>
-        )}
-        <small className="hint">
-          Unavailable items are disabled. Quantity fields cap at their maximum
-          for the facility.
-        </small>
-      </div>
+        </section>
 
-      {/* Queries */}
-      <div className="field span-2">
-        <label>Additional Requests / Queries</label>
-        <textarea
-          rows={4}
-          placeholder="Any special requests for seating layout, stage setup, snacks timing, VIP entry, etc."
-          value={queries}
-          onChange={(e) => setQueries(e.target.value)}
-        />
-        <small className="hint">
-          The facility in-charge will see this and can respond on approval.
-        </small>
-      </div>
-
-      {/* Route Preview */}
-      <div className="field span-2">
-        <label>Approval Route</label>
-        <div className="route glass-subtle">
-          {selectedFacility ? (
-            selectedFacility.admins.map((a, i) => (
-              <div key={i} className="pill">
-                <span className="dot" /> {a.name} &lt;{a.email}&gt;
+        <section className="smart-grid">
+          <article className="panel panel--wide">
+            <div className="panel__header">
+              <div>
+                <p className="panel__eyebrow">Purpose-led discovery</p>
+                <h2>Recommended venues by event type</h2>
               </div>
-            ))
-          ) : (
-            <span className="muted">
-              Select a facility to see its in-charge.
-            </span>
-          )}
-        </div>
-      </div>
 
-      {/* Submit */}
-      <div className="actions span-2">
-        <button type="submit" className="primary glow">
-          Submit Booking Request
-        </button>
-        {submitMsg && (
-          <div className={`toast ${submitMsg.type}`}>{submitMsg.text}</div>
-        )}
-      </div>
-    </form>
-  </div>
-</section>
+              <select name="purpose" value={form.purpose} onChange={handleChange} className="purpose-select">
+                {PURPOSES.map((purpose) => (
+                  <option key={purpose} value={purpose}>
+                    {purpose}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="facility-grid">
+              {recommendedFacilities.map((facility) => (
+                <button
+                  key={facility.id}
+                  type="button"
+                  className={selectedFacility?.id === facility.id ? "facility-card active" : "facility-card"}
+                  onClick={() => setForm((current) => ({ ...current, facilityId: facility.id }))}
+                >
+                  <div className="facility-card__head">
+                    <span>{facility.category}</span>
+                    <strong>{facility.capacity}+ seats</strong>
+                  </div>
+                  <h3>{facility.name}</h3>
+                  <p>{facility.description}</p>
+                  <div className="pill-row">
+                    {facility.amenities.slice(0, 3).map((item) => (
+                      <span key={item} className="mini-pill">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </article>
+
+          <aside className="panel">
+            <p className="panel__eyebrow">Approval route</p>
+            <h2>Who needs to approve</h2>
+            <div className="timeline">
+              {approvalRoute.map((approver) => (
+                <div key={approver} className="timeline__item">
+                  <span className="timeline__dot" />
+                  <div>
+                    <strong>{approver}</strong>
+                    <p>{approver === "Instant approval" ? "No manual review required." : "Request moves here after submission."}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="reminder-box">
+              <strong>Notifications enabled</strong>
+              <p>{form.notificationChannel} confirmation and reminder will be prepared automatically.</p>
+            </div>
+          </aside>
+        </section>
+
+        <section className="workspace-grid">
+          <article className="panel panel--form">
+            <div className="panel__header">
+              <div>
+                <p className="panel__eyebrow">Booking request</p>
+                <h2>Create a new reservation</h2>
+              </div>
+              <div className={availability?.isAvailable ? "status-badge success" : "status-badge warning"}>
+                {availabilityLabel}
+              </div>
+            </div>
+
+            <form className="booking-form" onSubmit={handleSubmit}>
+              <label>
+                Event title
+                <input
+                  type="text"
+                  name="eventTitle"
+                  value={form.eventTitle}
+                  onChange={handleChange}
+                  placeholder="AI Integrated Hackathon 2026"
+                  required
+                />
+              </label>
+
+              <label>
+                Facility
+                <input type="text" value={selectedFacility?.name || ""} readOnly />
+              </label>
+
+              <label>
+                Organizer
+                <input
+                  type="text"
+                  name="organizer"
+                  value={form.organizer}
+                  onChange={handleChange}
+                  placeholder="Faculty or event lead"
+                  required
+                />
+              </label>
+
+              <label>
+                Contact number
+                <input
+                  type="tel"
+                  name="contact"
+                  value={form.contact}
+                  onChange={handleChange}
+                  placeholder="+91 9XXXXXXXXX"
+                  required
+                />
+              </label>
+
+              <label>
+                Event date
+                <input type="date" name="date" value={form.date} onChange={handleChange} min={getMinimumDate()} required />
+              </label>
+
+              <label>
+                Expected attendees
+                <input
+                  type="number"
+                  name="attendees"
+                  min="1"
+                  max={selectedFacility?.capacity || 2000}
+                  value={form.attendees}
+                  onChange={handleChange}
+                  placeholder={`Max ${selectedFacility?.capacity || 0}`}
+                  required
+                />
+              </label>
+
+              <label>
+                Start time
+                <input type="time" name="startTime" value={form.startTime} onChange={handleChange} required />
+              </label>
+
+              <label>
+                End time
+                <input type="time" name="endTime" value={form.endTime} onChange={handleChange} required />
+              </label>
+
+              <label>
+                Confirmation channel
+                <select name="notificationChannel" value={form.notificationChannel} onChange={handleChange}>
+                  <option>Email</option>
+                  <option>SMS</option>
+                  <option>Email + SMS</option>
+                </select>
+              </label>
+
+              <label className="checkbox-field">
+                <input
+                  type="checkbox"
+                  name="needsQrCheckIn"
+                  checked={form.needsQrCheckIn}
+                  onChange={handleChange}
+                />
+                Enable optional QR code check-in on event day
+              </label>
+
+              <label className="field-span">
+                Special notes
+                <textarea
+                  name="notes"
+                  rows="4"
+                  value={form.notes}
+                  onChange={handleChange}
+                  placeholder="Stage setup, volunteer support, refreshments, or security requests."
+                />
+              </label>
+
+              <div className="field-span form-footer">
+                <div>
+                  <strong>{getDurationLabel(form.startTime, form.endTime)}</strong>
+                  <p>Notification preview: confirmation on approval, reminder 2 hours before the event.</p>
+                </div>
+                <button type="submit" className="primary-button" disabled={isSubmitting}>
+                  {isSubmitting ? "Submitting..." : "Submit booking request"}
+                </button>
+              </div>
+
+              {statusMessage ? (
+                <p className={statusVariant === "success" ? "message success" : "message error"}>
+                  {statusMessage}
+                </p>
+              ) : null}
+            </form>
+          </article>
+
+          <aside className="workspace-side">
+            <article className="panel">
+              <p className="panel__eyebrow">Live availability</p>
+              <h2>{selectedFacility?.name || "Select a facility"}</h2>
+              <p className="availability-subtitle">
+                {form.date ? `Checking ${formatDate(form.date)}` : "Pick a date to see booked slots."}
+              </p>
+
+              {loadingAvailability ? <p className="empty-state">Loading slot availability...</p> : null}
+
+              {!loadingAvailability && availability?.bookings?.length ? (
+                <div className="slot-list">
+                  {availability.bookings.map((booking) => (
+                    <div key={booking.id} className="slot-chip">
+                      <strong>{toTimeRange(booking.startTime, booking.endTime)}</strong>
+                      <span>{booking.eventTitle}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {!loadingAvailability && form.date && !availability?.bookings?.length ? (
+                <p className="empty-state">No bookings on this date yet.</p>
+              ) : null}
+            </article>
+
+            <article className="panel">
+              <p className="panel__eyebrow">AI smart suggestions</p>
+              <h2>Next best time slots</h2>
+              <div className="slot-list">
+                {aiSuggestions.length ? (
+                  aiSuggestions.map((slot) => (
+                    <button
+                      key={slot.startTime}
+                      type="button"
+                      className="suggestion-card"
+                      onClick={() => applySuggestedSlot(slot)}
+                    >
+                      <strong>{toTimeRange(slot.startTime, slot.endTime)}</strong>
+                      <span>{availability?.isAvailable ? "Also available now" : "Recommended conflict-free slot"}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="empty-state">Choose a date to generate smart slot recommendations.</p>
+                )}
+              </div>
+            </article>
+
+            <article className="panel">
+              <p className="panel__eyebrow">Your latest requests</p>
+              <h2>Recent booking history</h2>
+              <div className="history-list">
+                {myBookings.slice(0, 4).map((booking) => (
+                  <div key={booking.id} className="history-item">
+                    <div>
+                      <strong>{booking.eventTitle}</strong>
+                      <p>
+                        {booking.facility} on {formatDate(booking.date)}
+                      </p>
+                    </div>
+                    <span className={`history-status ${booking.status.toLowerCase()}`}>{booking.status}</span>
+                  </div>
+                ))}
+
+                {!myBookings.length ? <p className="empty-state">No requests yet. Your submissions will appear here.</p> : null}
+              </div>
+            </article>
+          </aside>
+        </section>
+      </main>
 
       <Footer />
+
+      <style>{`
+        .booking-page {
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at 15% 15%, rgba(20, 184, 166, 0.16), transparent 26%),
+            radial-gradient(circle at 85% 8%, rgba(249, 115, 22, 0.16), transparent 20%),
+            linear-gradient(180deg, #061522 0%, #081a28 48%, #07131d 100%);
+          color: #ecf7f9;
+        }
+
+        .booking-shell {
+          max-width: 1360px;
+          margin: 0 auto;
+          padding: 0 1.25rem 5rem;
+        }
+
+        .hero-panel,
+        .panel {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.06);
+          backdrop-filter: blur(20px);
+          box-shadow: 0 28px 60px rgba(2, 12, 24, 0.22);
+        }
+
+        .hero-panel {
+          display: grid;
+          grid-template-columns: 1.1fr 0.9fr;
+          gap: 1.8rem;
+          padding: 2rem;
+          border-radius: 34px;
+          margin-top: 1.25rem;
+        }
+
+        .hero-panel__eyebrow,
+        .panel__eyebrow {
+          margin: 0;
+          color: #8fe3cf;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          font-size: 0.76rem;
+        }
+
+        .hero-panel h1,
+        .panel h2 {
+          margin: 0.5rem 0 0.7rem;
+          font-family: "Poppins", "Segoe UI", sans-serif;
+        }
+
+        .hero-panel h1 {
+          font-size: clamp(2.3rem, 4.6vw, 4.4rem);
+          line-height: 0.97;
+          max-width: 780px;
+        }
+
+        .hero-panel__copy {
+          max-width: 760px;
+          line-height: 1.7;
+          color: rgba(227, 239, 242, 0.82);
+        }
+
+        .hero-panel__stats {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1rem;
+        }
+
+        .stat-card {
+          border-radius: 24px;
+          padding: 1.2rem;
+          background: linear-gradient(180deg, rgba(8, 39, 52, 0.9), rgba(4, 23, 34, 0.9));
+        }
+
+        .stat-card strong {
+          display: block;
+          font-size: 2rem;
+          margin-bottom: 0.35rem;
+        }
+
+        .stat-card span {
+          color: rgba(215, 230, 233, 0.76);
+        }
+
+        .smart-grid,
+        .workspace-grid {
+          display: grid;
+          gap: 1.4rem;
+          margin-top: 1.4rem;
+        }
+
+        .smart-grid {
+          grid-template-columns: 1.35fr 0.65fr;
+        }
+
+        .workspace-grid {
+          grid-template-columns: 1.15fr 0.85fr;
+          align-items: start;
+        }
+
+        .workspace-side {
+          display: grid;
+          gap: 1.4rem;
+        }
+
+        .panel {
+          border-radius: 30px;
+          padding: 1.4rem;
+        }
+
+        .panel--wide {
+          padding-bottom: 1.2rem;
+        }
+
+        .panel__header {
+          display: flex;
+          align-items: start;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 1.2rem;
+        }
+
+        .purpose-select,
+        .booking-form input,
+        .booking-form select,
+        .booking-form textarea {
+          width: 100%;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 18px;
+          padding: 0.95rem 1rem;
+          background: rgba(6, 24, 36, 0.85);
+          color: white;
+          outline: none;
+        }
+
+        .purpose-select {
+          max-width: 220px;
+        }
+
+        .facility-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 1rem;
+        }
+
+        .facility-card,
+        .suggestion-card {
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 24px;
+          padding: 1rem;
+          background: rgba(255, 255, 255, 0.04);
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+          transition: 0.2s ease;
+        }
+
+        .facility-card:hover,
+        .facility-card.active,
+        .suggestion-card:hover {
+          transform: translateY(-2px);
+          border-color: rgba(20, 184, 166, 0.55);
+          box-shadow: 0 20px 36px rgba(2, 12, 24, 0.22);
+        }
+
+        .facility-card__head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          color: rgba(212, 231, 234, 0.75);
+          font-size: 0.82rem;
+        }
+
+        .facility-card h3 {
+          margin: 0.65rem 0 0.4rem;
+          font-size: 1.15rem;
+        }
+
+        .facility-card p,
+        .timeline__item p,
+        .empty-state,
+        .availability-subtitle,
+        .history-item p,
+        .form-footer p,
+        .reminder-box p {
+          margin: 0;
+          color: rgba(216, 232, 235, 0.74);
+          line-height: 1.6;
+        }
+
+        .pill-row,
+        .slot-list,
+        .history-list {
+          display: grid;
+          gap: 0.75rem;
+        }
+
+        .mini-pill {
+          display: inline-flex;
+          margin-right: 0.45rem;
+          margin-top: 0.4rem;
+          padding: 0.38rem 0.72rem;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.08);
+          color: #eaf6f8;
+          font-size: 0.78rem;
+        }
+
+        .timeline {
+          display: grid;
+          gap: 1rem;
+        }
+
+        .timeline__item {
+          display: grid;
+          grid-template-columns: 16px 1fr;
+          gap: 0.8rem;
+          align-items: start;
+        }
+
+        .timeline__dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, #14b8a6, #0ea5e9);
+          margin-top: 0.45rem;
+        }
+
+        .reminder-box {
+          margin-top: 1.2rem;
+          padding: 1rem;
+          border-radius: 22px;
+          background: rgba(14, 165, 233, 0.12);
+          border: 1px solid rgba(14, 165, 233, 0.2);
+        }
+
+        .booking-form {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1rem;
+        }
+
+        .booking-form label {
+          display: flex;
+          flex-direction: column;
+          gap: 0.45rem;
+          color: rgba(236, 246, 248, 0.9);
+          font-weight: 600;
+        }
+
+        .booking-form input:focus,
+        .booking-form select:focus,
+        .booking-form textarea:focus,
+        .purpose-select:focus {
+          border-color: rgba(20, 184, 166, 0.75);
+          box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.14);
+        }
+
+        .checkbox-field {
+          flex-direction: row;
+          align-items: center;
+          gap: 0.7rem;
+          align-self: end;
+          padding: 0.85rem 1rem;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.04);
+          font-weight: 500;
+        }
+
+        .checkbox-field input {
+          width: auto;
+        }
+
+        .field-span,
+        .form-footer,
+        .message {
+          grid-column: 1 / -1;
+        }
+
+        .form-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+        }
+
+        .primary-button {
+          border: 0;
+          border-radius: 18px;
+          padding: 1rem 1.2rem;
+          background: linear-gradient(135deg, #14b8a6, #0ea5e9);
+          color: white;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .status-badge,
+        .history-status {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.55rem 0.85rem;
+          border-radius: 999px;
+          font-size: 0.82rem;
+          font-weight: 700;
+        }
+
+        .status-badge.success,
+        .history-status.approved {
+          background: rgba(34, 197, 94, 0.16);
+          color: #bbf7d0;
+        }
+
+        .status-badge.warning,
+        .history-status.pending {
+          background: rgba(245, 158, 11, 0.16);
+          color: #fde68a;
+        }
+
+        .history-status.rejected {
+          background: rgba(239, 68, 68, 0.16);
+          color: #fecaca;
+        }
+
+        .slot-chip {
+          padding: 0.9rem 1rem;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.04);
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+          align-items: center;
+        }
+
+        .slot-chip span,
+        .suggestion-card span {
+          color: rgba(214, 230, 232, 0.72);
+        }
+
+        .history-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 0.95rem 0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .history-item:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+
+        .message {
+          padding: 0.95rem 1rem;
+          border-radius: 18px;
+          font-weight: 600;
+        }
+
+        .message.success {
+          background: rgba(34, 197, 94, 0.14);
+          color: #bbf7d0;
+          border: 1px solid rgba(34, 197, 94, 0.26);
+        }
+
+        .message.error {
+          background: rgba(239, 68, 68, 0.14);
+          color: #fecaca;
+          border: 1px solid rgba(239, 68, 68, 0.26);
+        }
+
+        @media (max-width: 1080px) {
+          .hero-panel,
+          .smart-grid,
+          .workspace-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .hero-panel__stats,
+          .booking-form {
+            grid-template-columns: 1fr;
+          }
+
+          .panel__header,
+          .form-footer {
+            flex-direction: column;
+            align-items: stretch;
+          }
+        }
+      `}</style>
     </div>
   );
 };
-
-// ---------------------- CSS (in-file) ----------------------
-const CSS = `
-:root{
-  --primary:${COLORS.primary};
-  --secondary:${COLORS.secondary};
-  --bg:${COLORS.background};
-  --surface:${COLORS.surface};
-  --border:${COLORS.border};
-  --text:${COLORS.textPrimary};
-  --text2:${COLORS.textSecondary};
-  --success:${COLORS.success};
-  --danger:${COLORS.danger};
-  --warning:${COLORS.warning};
-}
-
-*{ box-sizing:border-box }
-html, body, #root { height:100%; }
-body { margin:0; background: radial-gradient(1200px 600px at 15% 10%, rgba(108,92,231,0.15), transparent 60%),
-                      radial-gradient(1000px 500px at 85% 20%, rgba(142,124,246,0.12), transparent 60%),
-                      var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
-a { color:inherit; text-decoration:none }
-
-.page-root { min-height:100vh; display:flex; flex-direction:column; }
-
-/* Glass + Elevation */
-.glass { background: var(--surface); border:1px solid var(--border); backdrop-filter: blur(12px); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
-.glass-subtle { background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); backdrop-filter: blur(8px); border-radius: 14px; }
-.lift { transition: transform .3s ease, box-shadow .3s ease; }
-.lift:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(0,0,0,0.35); }
-.glow { position:relative; }
-.glow::after { content:""; position:absolute; inset:-2px; border-radius:inherit; padding:2px; background:linear-gradient(120deg, rgba(108,92,231,0.7), rgba(142,124,246,0.6), transparent 60%); -webkit-mask: 
-  linear-gradient(#000 0 0) content-box, 
-  linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none; animation: borderGlow 4s ease-in-out infinite; }
-@keyframes borderGlow {
-  0% { opacity: .4 }
-  50% { opacity: .9 }
-  100% { opacity: .4 }
-}
-
-/* Header */
-.header { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; padding:14px 28px; margin:14px; background:rgba(10,15,30,0.6); }
-.brand { display:flex; align-items:center; gap:12px; }
-.logo { width:42px; height:42px; object-fit:contain; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4)); }
-.title { font-weight:800; letter-spacing:.3px; font-size: clamp(14px, 2.5vw, 18px); }
-.nav { display:flex; align-items:center; gap:18px; }
-.nav a { padding:8px 12px; border-radius:10px; color:var(--text2); transition: background .2s; }
-.nav a:hover { background: rgba(255,255,255,0.06); color:var(--text); }
-.nav .active { background: rgba(108,92,231,0.2); color:white; }
-
-/* Hero */
-.hero { position:relative; height: 72vh; min-height:520px; overflow:hidden; margin: 8px 14px 0; border-radius:0px; }
-.hero-video { position:absolute; width:100%; height:100%; object-fit:cover; inset:0; z-index:1; }
-.hero-overlay { position:absolute; inset:0; background:linear-gradient(to bottom, rgba(6,10,22,0.5), rgba(6,10,22,0.85)); z-index:2; }
-.hero-content { position:relative; z-index:3; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 16px; }
-.hero h1 { font-size:clamp(28px, 5.5vw, 56px); margin:0 0 12px; text-shadow: 0 6px 24px rgba(0,0,0,0.6); }
-.hero p { max-width:860px; color:var(--text2); margin:0 0 24px; font-size:clamp(14px, 2.2vw, 18px); }
-.cta-button { display:inline-block; padding:12px 20px; border-radius:12px; background: linear-gradient(130deg, var(--primary), var(--secondary)); color:white; font-weight:700; box-shadow: 0 12px 30px rgba(108,92,231,0.35); }
-.cta-button:hover { transform: translateY(-1px); }
-
-/* Floating orbs */
-.orbs .orb { position:absolute; z-index:2; filter: blur(30px); opacity:.35; background: radial-gradient(closest-side, var(--primary), transparent); }
-.orbs .o1 { width:220px; height:220px; top:8%; left:8%; animation: float 9s ease-in-out infinite; }
-.orbs .o2 { width:160px; height:160px; bottom:14%; right:12%; animation: float 11s ease-in-out infinite reverse; }
-.orbs .o3 { width:120px; height:120px; top:20%; right:25%; animation: float 13s ease-in-out infinite; }
-@keyframes float { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
-
-/* Intro */
-.intro { display:flex; justify-content:center; padding:42px 16px 24px; }
-.intro .card { max-width:980px; padding:24px; }
-
-/* Gallery */
-
-
-
-/* ---------- Gallery centered (Slick-friendly) ---------- */
-/* top-level section spacing only — do NOT force display:flex here */
-.gallery {
-  padding: 18px;
-}
-
-/* center & constrain the actual slick slider container */
-.gallery .slick-slider {
-  width: 80%;
-  max-width: 900px;
-  margin: 0 auto;      /* centers the whole slider */
-  border-radius: 16px;
-}
-
-/* make each slick-slide center its content — important */
-.gallery .slick-slide {
-  display: flex !important;
-  justify-content: center;
-  align-items: center;
-}
-
-/* image styling — responsive and safe with Slick */
-.slide img {
-  display: block;
-  width: 100%;
-  max-width: 820px;     /* prevents extreme stretching on large screens */
-  height: auto;
-  max-height: 450px;    /* prevents excessive height */
-  object-fit: cover;
-  border-radius: 16px;
-}
-
-/* mobile adjustments */
-@media (max-width: 880px) {
-  .gallery .slick-slider { width: 95%; }
-  .slide img { max-height: 280px; border-radius: 12px; }
-}
-
-/* Form */
-.form-wrap { display:flex; justify-content:center; padding: 54px 16px 24px; }
-.form-wrap .card { width: min(1100px, 96%); padding: 24px; }
-.form-head { display:flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.form-head h3 { margin:0; font-size: clamp(18px, 3vw, 24px); }
-.form-head p { margin:0; color:var(--warning); opacity:.95; }
-
-.grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.field { display:flex; flex-direction:column; gap:8px; }
-.field span.req { color:#ff6b6b; margin-left:4px; }
-.field input, .field select, .field textarea { width:100%; padding:12px 14px; border-radius:12px; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.16); color:var(--text); outline:none; }
-.field input::placeholder, .field textarea::placeholder { color:#94a3b8; }
-.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(142,124,246,0.25); }
-.field .hint { color:#9aa8bf; font-size: 12px; }
-.field .muted { color:#98a4ba; font-size:14px; }
-.field .error-text { color: var(--danger); font-size: 12px; }
-.error { border-color: var(--danger) !important; }
-
-.span-2 { grid-column: span 2; }
-
-.resources { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; padding: 10px; background: rgba(255,255,255,0.04); border:1px dashed rgba(255,255,255,0.14); border-radius:14px; }
-.res-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); }
-.res-item input[type="checkbox"] { width:18px; height:18px; accent-color: var(--primary); }
-.res-item.qty { justify-content: space-between; gap:14px; }
-.res-item.qty input[type="number"] { width: 120px; text-align:right; }
-.res-item .hint { color:#9aa8bf; font-size:12px; }
-.res-item.disabled { opacity:.5; pointer-events:none; }
-
-.route { display:flex; gap:10px; flex-wrap:wrap; padding:10px; }
-.pill { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background: rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); font-size:13px; color:var(--text2); }
-.pill .dot { width:8px; height:8px; border-radius:999px; background: var(--success); display:inline-block; }
-
-.actions { display:flex; align-items:center; gap:12px; }
-.primary { border:0; padding:12px 16px; border-radius:12px; background: linear-gradient(130deg, var(--primary), var(--secondary)); color:white; font-weight:800; letter-spacing:.3px; cursor:pointer; box-shadow: 0 14px 36px rgba(108,92,231,0.35); }
-.primary:hover { transform: translateY(-1px); }
-.toast { padding:10px 12px; border-radius:12px; font-size:14px; }
-.toast.success { background: rgba(20,184,166,0.15); border: 1px solid rgba(20,184,166,0.35); color:#99f6e4; }
-.toast.error { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35); color:#fecaca; }
-
-/* Quick Links */
-.quick-links { padding: 28px 16px 60px; text-align:center; }
-.quick-links h2 { margin: 8px 0 18px; }
-.quick-links .btns { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }
-.quick-links button { padding:10px 14px; border-radius:12px; background: rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.16); color:var(--text); cursor:pointer; transition: .2s; }
-.quick-links button:hover { background: rgba(255,255,255,0.12); transform: translateY(-1px); }
-
-/* Footer */
-.footer { padding: 24px 18px 40px; text-align:center; color:var(--text2); }
-
-/* Animations */
-.fade-up { animation: fadeUp .8s ease both; }
-@keyframes fadeUp { from { opacity:0; transform: translateY(6px) } to { opacity:1; transform: translateY(0) } }
-
-/* Responsive */
-@media (max-width: 880px) {
-  .grid { grid-template-columns: 1fr; }
-  .span-2 { grid-column: auto; }
-  .resources { grid-template-columns: 1fr; }
-  .hero { height: 60vh; }
-  .slide img { height: 280px; }
-}
-`;
 
 export default Booking;
