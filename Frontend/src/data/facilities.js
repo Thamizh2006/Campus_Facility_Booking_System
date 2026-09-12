@@ -92,7 +92,9 @@ export const FACILITIES = [
 ];
 
 export const getFacilitiesByPurpose = (purpose) =>
-  FACILITIES.filter((facility) => facility.eventTypes.includes(purpose));
+  !purpose || purpose === "All"
+    ? FACILITIES
+    : FACILITIES.filter((facility) => facility.eventTypes.includes(purpose));
 
 export const getFacilityById = (facilityId) =>
   FACILITIES.find((facility) => facility.id === facilityId) ?? null;
