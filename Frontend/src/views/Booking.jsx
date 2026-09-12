@@ -6,7 +6,7 @@ import { apiRequest, getAuthHeaders } from "../lib/api";
 import { FACILITIES, PURPOSES, getFacilitiesByPurpose, getFacilityById } from "../data/facilities";
 
 const DEFAULT_FORM = {
-  purpose: "Hackathon",
+  purpose: "",
   facilityId: "",
   eventTitle: "",
   organizer: "",
@@ -337,9 +337,23 @@ const Booking = () => {
     }));
   };
 
+  const handleClearFilters = () => {
+    setForm((current) => ({
+      ...current,
+      purpose: "",
+    }));
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setStatusMessage("");
+
+    if (!form.purpose) {
+      setStatusVariant("error");
+      setStatusMessage("Please select an event purpose before submitting.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -428,13 +442,26 @@ const Booking = () => {
                 <h2>Recommended venues by event type</h2>
               </div>
 
-              <select name="purpose" value={form.purpose} onChange={handleChange} className="purpose-select">
-                {PURPOSES.map((purpose) => (
-                  <option key={purpose} value={purpose}>
-                    {purpose}
-                  </option>
-                ))}
-              </select>
+              <div className="filter-controls">
+                <select name="purpose" value={form.purpose} onChange={handleChange} className="purpose-select">
+                  <option value="">All event types</option>
+                  {PURPOSES.map((purpose) => (
+                    <option key={purpose} value={purpose}>
+                      {purpose}
+                    </option>
+                  ))}
+                </select>
+
+                {form.purpose && (
+                  <button
+                    type="button"
+                    className="clear-filters-btn"
+                    onClick={handleClearFilters}
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="facility-grid">
@@ -833,6 +860,31 @@ const Booking = () => {
 
         .purpose-select {
           max-width: 220px;
+        }
+
+        .filter-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .clear-filters-btn {
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 18px;
+          padding: 0.95rem 1.1rem;
+          background: rgba(255, 255, 255, 0.08);
+          color: #ecf7f9;
+          font-weight: 600;
+          cursor: pointer;
+          transition: 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .clear-filters-btn:hover {
+          background: rgba(255, 255, 255, 0.15);
+          border-color: rgba(20, 184, 166, 0.55);
+          color: white;
         }
 
         .facility-grid {
